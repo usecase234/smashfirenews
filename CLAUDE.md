@@ -22,14 +22,17 @@ decisions; the second is the phase sequence we're executing against.
 
 ## Where we are
 
-**Currently on: Phase 1 (Hub tenancy skeleton) — complete.**
-`publishers`/`publisher_installations` migration applied, `TenantScopedMixin`
-+ `tenant_scoped_select` are the only sanctioned way to query tenant-owned
-tables, `TenantResolutionMiddleware` resolves bearer credentials to a
-`TenantContext` (401 before any route runs), and Buddy Magazine seeds
-idempotently as `publisher_id=1`. Isolation is tested at the query-
-construction level, not just on current data. Next: Phase 2 (WordPress
-plugin skeleton).
+**Currently on: Phase 2 (WordPress plugin skeleton) — complete.**
+`smashfire_pr_submission` registered as a non-public CPT (no native edit
+screen — editorial workflow lives entirely under the plugin's own admin
+menu); `smashfire_pr_asset` deliberately kept out of the CPT system and
+given its own dbDelta-created table instead, per the doc's high-volume
+guidance. `Smashfire_Hub_Client::request()` is now the single choke point
+for every Hub call — nothing else may call `wp_remote_request` against the
+Hub. The five admin screens (Incoming/Drafts/Published/Senders/Settings)
+were already scaffolded in Phase 0 and still render placeholder React
+roots — no submission form yet. Next: Phase 3 (thin vertical slice: one
+submission end to end).
 
 Update this section as phases complete — it's the one thing worth keeping
 current instead of re-explaining status every session.
