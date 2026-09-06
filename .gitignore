@@ -1,0 +1,17 @@
+# envs
+.env
+infra/.env
+
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+.venv/
+
+# node
+node_modules/
+build/
+
+# wordpress local dev volume noise
+infra/wp-content-uploads/
