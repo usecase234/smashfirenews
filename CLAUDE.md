@@ -22,9 +22,14 @@ decisions; the second is the phase sequence we're executing against.
 
 ## Where we are
 
-**Currently on: Phase 0 (repo + local env scaffolding) — complete.**
-Hub `/health` route is live and tested; plugin bootstrap registers the five
-admin screens as placeholders. Next: Phase 1 (Hub tenancy skeleton).
+**Currently on: Phase 1 (Hub tenancy skeleton) — complete.**
+`publishers`/`publisher_installations` migration applied, `TenantScopedMixin`
++ `tenant_scoped_select` are the only sanctioned way to query tenant-owned
+tables, `TenantResolutionMiddleware` resolves bearer credentials to a
+`TenantContext` (401 before any route runs), and Buddy Magazine seeds
+idempotently as `publisher_id=1`. Isolation is tested at the query-
+construction level, not just on current data. Next: Phase 2 (WordPress
+plugin skeleton).
 
 Update this section as phases complete — it's the one thing worth keeping
 current instead of re-explaining status every session.
