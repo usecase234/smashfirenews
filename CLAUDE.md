@@ -19,10 +19,19 @@ decisions; the second is the phase sequence we're executing against.
   `classify_relevance`.
 - Publisher quotas are enforced at the Hub, even if a local plugin
   installation is modified.
+- `DATABASE_URL` must use the `postgresql+psycopg://` scheme, not plain
+  `postgresql://`. The project depends on psycopg 3
+  (`psycopg[binary]>=3.1` in `hub/pyproject.toml`), and SQLAlchemy defaults
+  a bare `postgresql://` URL to psycopg2, which isn't installed — the app
+  crashes at startup with `ModuleNotFoundError`. Railway supplies the bare
+  scheme by default, so it must be overridden.
 
 ## Where we are
 
-**Currently on: Phase 3 (thin vertical slice) — complete.**
+**Phases 0–3 complete, committed, and deployed.** Phase 3 (thin vertical
+slice) had been built locally but was never committed until commit
+`04df2b5` — that gap is now closed.
+
 Hub: `submissions` and `draft_versions` tables (both `TenantScopedMixin`,
 migration `8f2a6c9d1b30`); `POST /submissions`, `GET /submissions`,
 `GET /submissions/{id}`, `POST /submissions/{id}/generate-draft` (the
@@ -48,8 +57,20 @@ data. `Smashfire_PR_Publisher::publish_submission()` is the one place that
 isn't a pure Hub proxy: it pulls the latest draft, creates a real
 `wp_insert_post`, stores provenance in underscore-prefixed (private)
 postmeta, then reports the post back to the Hub. Published/Senders/Settings
-screens are still Phase 0 placeholders. Next: Phase 4 (replace the stub
-with a real Redis-backed queue worker and the AI router).
+screens are still Phase 0 placeholders.
+
+Infra: the Hub moved from the Railway project `intelligent-wonder` to
+`industrious-intuition`, so the Hub, Postgres, and Redis now all live in
+one project on private networking. The old service in `intelligent-wonder`
+still exists and needs to be deleted. New Hub URL:
+`https://smashfirenews-production-8575.up.railway.app`. Verified working in
+production: `/health` returns `ok`, `/docs` lists all Phase 3 routes, and
+`GET /submissions` with the installation credential returns `[]`.
+
+Next: a dv7.com smoke test — point the WordPress plugin at the Hub URL and
+installation credential and run a submission end to end — then Phase 4
+(replace the stub with a real Redis-backed queue worker and the AI
+router).
 
 Update this section as phases complete — it's the one thing worth keeping
 current instead of re-explaining status every session.
