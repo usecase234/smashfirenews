@@ -6,6 +6,12 @@ finished drafts -> publish) plus the two architectural rules this phase is
 required to encode a test for: tenant isolation on the new tables, and
 "original submissions are immutable; drafts are versioned, never
 overwritten in place" (CLAUDE.md hard rules).
+
+Phase 4 changed generate-draft from a synchronous call into an enqueue
+(see tests/test_jobs.py for the job-queue-specific tests). There's no live
+arq worker process in tests, so these tests simulate one by calling
+app.workers.worker.run_action directly against the job the enqueue call
+created -- the same function the real worker's arq task wraps.
 """
 from __future__ import annotations
 
@@ -14,6 +20,8 @@ from fastapi.testclient import TestClient
 from app.core.security import generate_installation_token, hash_token
 from app.db.models.publisher import Publisher, PublisherInstallation
 from app.main import app
+from app.services import jobs as jobs_service
+from app.workers.worker import run_action
 
 client = TestClient(app)
 
@@ -57,7 +65,7 @@ def _submit(token: str, headline: str = "Buddy signs new headliner") -> dict:
 
 
 def test_submission_to_publish_end_to_end(db_session):
-    _, token = _seed_installation(db_session, "buddy-magazine")
+    publisher, token = _seed_installation(db_session, "buddy-magazine")
 
     submission = _submit(token)
     submission_id = submission["id"]
@@ -66,9 +74,21 @@ def test_submission_to_publish_end_to_end(db_session):
     queue = client.get("/submissions", params={"status": "queued"}, headers=_auth(token)).json()
     assert [s["id"] for s in queue] == [submission_id]
 
-    draft = client.post(f"/submissions/{submission_id}/generate-draft", headers=_auth(token))
-    assert draft.status_code == 201, draft.text
-    draft_body = draft.json()
+    enqueued = client.post(f"/submissions/{submission_id}/generate-draft", headers=_auth(token))
+    assert enqueued.status_code == 202, enqueued.text
+    job_body = enqueued.json()
+    assert job_body["status"] == "queued"
+    assert job_body["action"] == "generate_publisher_draft"
+
+    # No live arq worker in tests -- run the job's handler directly, the
+    # same function the worker's arq task calls.
+    job = jobs_service.get_job(db_session, publisher.id, job_body["id"])
+    run_action(db_session, job)
+    assert job.status == "succeeded"
+
+    detail = client.get(f"/submissions/{submission_id}", headers=_auth(token)).json()
+    assert len(detail["drafts"]) == 1
+    draft_body = detail["drafts"][0]
     assert draft_body["version"] == 1
     assert draft_body["generator"] == "stub-v1"
     assert draft_body["body_text"] == submission["body_text"]
@@ -103,16 +123,26 @@ def test_cannot_publish_without_a_generated_draft(db_session):
 
 
 def test_generating_a_draft_never_touches_the_original_and_never_overwrites_a_prior_version(db_session):
-    _, token = _seed_installation(db_session, "buddy-magazine")
+    publisher, token = _seed_installation(db_session, "buddy-magazine")
     submission = _submit(token)
     submission_id = submission["id"]
 
-    first = client.post(f"/submissions/{submission_id}/generate-draft", headers=_auth(token)).json()
-    second = client.post(f"/submissions/{submission_id}/generate-draft", headers=_auth(token)).json()
+    def _generate_and_run():
+        response = client.post(f"/submissions/{submission_id}/generate-draft", headers=_auth(token))
+        assert response.status_code == 202, response.text
+        job = jobs_service.get_job(db_session, publisher.id, response.json()["id"])
+        run_action(db_session, job)
+        assert job.status == "succeeded"
+        return job
 
-    assert first["version"] == 1
-    assert second["version"] == 2
-    assert first["id"] != second["id"]  # a new row, not an update to V1
+    # Each call only creates a new job because the previous one already
+    # reached a terminal status by the time the next call is made -- while
+    # a job is still queued/running, a second call must return it unchanged
+    # (see tests/test_jobs.py for that behavior in isolation).
+    first_job = _generate_and_run()
+    second_job = _generate_and_run()
+
+    assert first_job.id != second_job.id  # a new job, not the same one reused
 
     detail = client.get(f"/submissions/{submission_id}", headers=_auth(token)).json()
     assert detail["body_text"] == submission["body_text"]  # original untouched

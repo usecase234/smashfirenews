@@ -5,23 +5,33 @@ Submission routes: intake, Pre-Writer/Finished-Drafts queues, the
 Every route depends on `get_current_tenant`, which only exists once
 TenantResolutionMiddleware has resolved a publisher_id — there is no route
 here that accepts a tenant id from the caller.
+
+Phase 4: generate-draft no longer runs the stub inline. It enqueues a job
+(app/services/jobs.py) and returns 202 with the job's id/status; the arq
+worker (app/workers/worker.py) is what actually calls
+`generate_publisher_draft`. The plugin polls GET /jobs/{id}
+(app/api/jobs.py) to learn when the draft is ready.
 """
 from __future__ import annotations
 
+from arq import ArqRedis
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.schemas import (
-    DraftVersionOut,
+    JobOut,
     PublishRequest,
     SubmissionCreate,
     SubmissionDetail,
     SubmissionSummary,
 )
+from app.core.queue import get_arq_redis
 from app.core.tenancy import TenantContext, get_current_tenant
 from app.db.session import get_db
+from app.services import jobs as jobs_service
 from app.services import submissions as submission_service
-from app.services.drafts import generate_publisher_draft
+
+GENERATE_PUBLISHER_DRAFT = "generate_publisher_draft"
 
 router = APIRouter(prefix="/submissions", tags=["submissions"])
 
@@ -60,14 +70,20 @@ def get_submission(
     return _get_or_404(db, tenant.publisher_id, submission_id)
 
 
-@router.post("/{submission_id}/generate-draft", response_model=DraftVersionOut, status_code=201)
-def generate_draft(
+@router.post("/{submission_id}/generate-draft", response_model=JobOut, status_code=202)
+async def generate_draft(
     submission_id: int,
     tenant: TenantContext = Depends(get_current_tenant),
     db: Session = Depends(get_db),
+    redis: ArqRedis = Depends(get_arq_redis),
 ):
     submission = _get_or_404(db, tenant.publisher_id, submission_id)
-    return generate_publisher_draft(db, submission)
+    job, created = jobs_service.get_or_create_job(
+        db, tenant.publisher_id, submission.id, GENERATE_PUBLISHER_DRAFT
+    )
+    if created:
+        await redis.enqueue_job("run_action_job", job.id, _job_id=job.idempotency_key)
+    return job
 
 
 @router.post("/{submission_id}/publish", response_model=SubmissionDetail)

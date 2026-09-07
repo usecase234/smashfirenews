@@ -57,3 +57,17 @@ class SubmissionDetail(SubmissionSummary):
 class PublishRequest(BaseModel):
     wp_post_id: int
     live_url: str
+
+
+class JobOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    submission_id: int
+    action: str
+    status: str
+    attempts: int
+    created_at: dt.datetime
+    started_at: dt.datetime | None
+    finished_at: dt.datetime | None
+    error: str | None
