@@ -41,9 +41,16 @@ decisions; the second is the phase sequence we're executing against.
 
 ## Where we are
 
-**Phases 0–3 complete, committed, and deployed.** Phase 3 (thin vertical
-slice) had been built locally but was never committed until commit
-`04df2b5` — that gap is now closed.
+**Phases 0–3 complete, committed, deployed, and verified end to end.**
+Phase 3 (thin vertical slice) had been built locally but was never
+committed until commit `04df2b5` — that gap is now closed, and the
+dv7.com smoke test below confirms the whole loop works in production.
+
+**Phase 4 is now in progress**: the Redis-backed queue worker, prompt
+service, AI router (DeepSeek V4 Flash and GPT-5.6 Luna as initial
+candidates), usage ledger, and rewrite-with-versioning (Draft V2 without
+touching V1) that replace the Phase 3 stub. See "Phase 4 decisions"
+below for the constraints this work must hold to.
 
 Hub: `submissions` and `draft_versions` tables (both `TenantScopedMixin`,
 migration `8f2a6c9d1b30`); `POST /submissions`, `GET /submissions`,
@@ -94,11 +101,31 @@ diagnosing an earlier blank-screen issue (root cause was a missing
 `admin-ui/build/` on the server, unrelated to any of the above) have been
 removed now that the screen renders correctly.
 
-Next: Phase 4 — replace the stub with a real Redis-backed queue worker
-and the AI router.
+Next: finish Phase 4 (see below), then Phase 5 security/quota hardening.
 
 Update this section as phases complete — it's the one thing worth keeping
 current instead of re-explaining status every session.
+
+## Phase 4 decisions
+
+- Exactly five constrained AI actions, each its own service function:
+  `analyze_submission`, `generate_publisher_draft`, `rewrite_draft`,
+  `generate_headlines`, `classify_relevance`. No generic
+  prompt-passthrough endpoint under any circumstances.
+- Each action gets its own prompt template, versioned in code.
+- Per-publisher voice profiles are a deliberate addition to the build
+  plan's Phase 4 scope — not called for by name in the build plan's Phase
+  4 section, but added on purpose so `generate_publisher_draft` and
+  `rewrite_draft` have a persistent voice to read from rather than
+  landing later as a retrofit.
+- The queue worker runs as a separate Railway service inside the
+  `industrious-intuition` project (alongside the Hub, Postgres, and
+  Redis). It must import `hub/app/core/config.py` rather than reading
+  env vars independently, so the `postgresql+psycopg://` DATABASE_URL
+  normalization (see hard rules above) applies to the worker too, not
+  just the API process.
+- Model pricing lives in a config table, not inline constants — so
+  rate changes and new model candidates don't require a code deploy.
 
 ## Repo layout
 
