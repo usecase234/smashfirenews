@@ -25,6 +25,19 @@ decisions; the second is the phase sequence we're executing against.
   a bare `postgresql://` URL to psycopg2, which isn't installed — the app
   crashes at startup with `ModuleNotFoundError`. Railway supplies the bare
   scheme by default, so it must be overridden.
+- `SMASHFIRE_HUB_URL` and `SMASHFIRE_SITE_CREDENTIAL` go in dv7's
+  `wp-config.php` as `define()` constants, never in a plugin settings
+  screen. `Smashfire_Hub_Client` (`plugin/includes/class-hub-client.php`)
+  only ever reads them via `defined()`/constant lookup — there is no
+  options-table path for the site credential, so it can't leak through a
+  WordPress export/backup or be edited by anyone with only `edit_posts`.
+- Windows-built plugin zips cannot be installed through WordPress's
+  Add Plugin uploader on dv7.com's host: `Compress-Archive` writes
+  backslash (`\`) path separators, which this host's zip extraction
+  doesn't accept, so the upload silently fails to lay out files
+  correctly. Deploy by uploading files individually through cPanel File
+  Manager, or upload the zip and extract it via cPanel's own extractor —
+  never via WordPress's plugin uploader.
 
 ## Where we are
 
@@ -67,10 +80,22 @@ still exists and needs to be deleted. New Hub URL:
 production: `/health` returns `ok`, `/docs` lists all Phase 3 routes, and
 `GET /submissions` with the installation credential returns `[]`.
 
-Next: a dv7.com smoke test — point the WordPress plugin at the Hub URL and
-installation credential and run a submission end to end — then Phase 4
-(replace the stub with a real Redis-backed queue worker and the AI
-router).
+**The dv7.com smoke test is complete and verified end to end**: public
+submission form (`?smashfire_pr_submit=1`) → Hub intake → Generate Draft
+from the Incoming screen → Draft V1 (`stub-v1`) appears in Finished
+Drafts → Publish Now creates a live WordPress post — all driven through
+the wp-admin UI, not curl, with a clean debug log. Getting there also
+surfaced and fixed real bugs, not just config: `register_post_type()`
+silently failed because `smashfire_pr_submission` (23 chars) was over
+WordPress's 20-char post-type-name limit, now `smashfire_submission`; a
+duplicate `add_submenu_page()` registration for Incoming; and the
+temporary `error_log` calls added to `enqueue_admin_ui()` while
+diagnosing an earlier blank-screen issue (root cause was a missing
+`admin-ui/build/` on the server, unrelated to any of the above) have been
+removed now that the screen renders correctly.
+
+Next: Phase 4 — replace the stub with a real Redis-backed queue worker
+and the AI router.
 
 Update this section as phases complete — it's the one thing worth keeping
 current instead of re-explaining status every session.
