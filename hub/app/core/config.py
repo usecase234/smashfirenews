@@ -5,6 +5,7 @@ environment — never hardcoded, never passed to the WordPress plugin.
 """
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,6 +17,17 @@ class Settings(BaseSettings):
     # Core infra
     database_url: str = "postgresql+psycopg://smashfire:smashfire@localhost:5432/smashfire_hub"
     redis_url: str = "redis://localhost:6379/0"
+
+    @field_validator("database_url")
+    @classmethod
+    def _normalize_database_url_driver(cls, value: str) -> str:
+        """Railway (and other hosts) hand out a bare `postgresql://` URL,
+        which makes SQLAlchemy default to psycopg2 — not installed, since
+        this project depends on psycopg 3. Force the psycopg 3 driver
+        unless a driver is already specified."""
+        if value.startswith("postgresql://"):
+            return "postgresql+psycopg://" + value[len("postgresql://") :]
+        return value
 
     # Auth
     hub_jwt_secret: str = "dev-only-change-me"
