@@ -1,3 +1,4 @@
 from app.db.models.publisher import Publisher, PublisherInstallation
+from app.db.models.submission import DraftVersion, Submission
 
-__all__ = ["Publisher", "PublisherInstallation"]
+__all__ = ["DraftVersion", "Publisher", "PublisherInstallation", "Submission"]
