@@ -8,7 +8,7 @@
  * editor screen. The Hub's own `assets` table (see the Hub data model in
  * docs/Smashfire_PR_Full_Product_Technical_Plan_2026.md) remains the
  * canonical, multi-tenant record; this table is only ever a local cache
- * keyed to a `smashfire_pr_submission` post.
+ * keyed to a `smashfire_submission` post.
  *
  * Schema is created now, before any code reads or writes it, so the
  * decision is locked in structurally rather than retrofitted once real

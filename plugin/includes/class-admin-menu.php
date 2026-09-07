@@ -70,7 +70,25 @@ class Smashfire_PR_Admin_Menu {
 			'dashicons-megaphone'
 		);
 
+		// Relabels the top-level menu's own auto-generated submenu entry
+		// (which WordPress would otherwise title "Smashfire PR") to
+		// "Incoming". No callback is passed here — the top-level page's own
+		// hook (registered by add_menu_page() above) already renders
+		// render_screen_incoming(); registering a second callback for the
+		// same slug/parent pair hooked to a different, never-fired hook
+		// name was dead code.
+		add_submenu_page(
+			'smashfire-pr-incoming',
+			'Smashfire PR — Incoming',
+			'Incoming',
+			'edit_posts',
+			'smashfire-pr-incoming'
+		);
+
 		foreach ( self::SCREENS as $slug => $label ) {
+			if ( 'incoming' === $slug ) {
+				continue;
+			}
 			add_submenu_page(
 				'smashfire-pr-incoming',
 				"Smashfire PR — {$label}",
